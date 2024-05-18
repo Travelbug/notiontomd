@@ -1,0 +1,29 @@
+{
+  "name": "notiontomd",
+  "version": "1.0.0",
+  "description": "converts notion pages to markdown for a static website generator using the notion API",
+  "main": "bin/index.js",
+  "bin": {
+    "convert": "./bin/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Travelbug/notiontomd.git"
+  },
+  "keywords": [
+    "notion",
+    "hugo",
+    "markdown"
+  ],
+  "author": "Mischa Geiser",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Travelbug/notiontomd/issues"
+  },
+  "homepage": "https://github.com/Travelbug/notiontomd#readme",
+  "dependencies": {
+    "@notionhq/client": "^2.2.15",
+    "fs-extra": "^11.2.0",
+    "slug": "^9.0.0"
+  }
+}
