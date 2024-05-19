@@ -50,15 +50,17 @@ class CharacterRenderer{
     pageId = "";
     name = "";
     coreBelief = "";
+    id = 0;
     
     beliefDescription = "";
     playstyleDescription = "";
     
     readingMode = ReadingModes.None;
-    constructor(pageId, name, coreBelief){
+    constructor(pageId, name, coreBelief, id){
         this.pageId = pageId;
         this.name = name;
         this.coreBelief = coreBelief;
+        this.id = id;
         return this.readPageContent();
     }
     async readPageContent() {
@@ -146,22 +148,14 @@ class CharacterRenderer{
     }
     
     renderCharacter() {
-        console.log('------------------------------------------------------------');
-        console.log('Name: ' + this.name);
-        console.log('Core Belief: ' + this.coreBelief);
-        console.log('\n');
-        console.log(this.beliefDescription);
-        console.log('\n');
-        console.log('Playstyle:');
-        console.log('\n');
-        console.log(this.playstyleDescription);
-        console.log('\n');
-        
-        fs.outputFileSync('./bin/characters/' + slug(this.name) + '.md', 
-            '# ' + this.name + '\n\n' + 
+        fs.outputFileSync('./bin/characters/' + slug(this.name) + '.md',
+            '---\n' +
+            'title: '+this.name+'\n' +
+            'weight: '+this.id+'\n' +
+            '---\n' +
             '## ' + this.coreBelief + '\n\n' + 
             this.beliefDescription + '\n\n' + 
-            '## Play Style\n\n' +
+            '### Play Style\n\n' +
             this.playstyleDescription
         );
     }
@@ -172,7 +166,9 @@ getDatabasePages('63e64e3e95564a55b740f725e90a2f5c')
         var characterRenderer = await new CharacterRenderer(
             page.id, 
             page.properties.Name.title[0]?.plain_text ?? '',
-            page.properties['Core Belief'].rich_text[0]?.plain_text ?? '');
+            page.properties['Core Belief'].rich_text[0]?.plain_text ?? '',
+            page.properties['ID'].number ?? 0
+            );
         characters.push(characterRenderer);
     }))).then(() => {
         console.log('Rendering all characters');
