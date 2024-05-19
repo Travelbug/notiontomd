@@ -2,9 +2,10 @@
 
 const { Client } = require('@notionhq/client');
 const fs = require('fs-extra')
+const config = require('../config.js');
 const slug = require('slug')
 
-const notion = new Client({ auth: 'secret_RkjqkTTxleJm0iOEEIsY95EDVtzMHNswN9UoGqMIq0i' });
+const notion = new Client({ auth: config.NOTION_API_KEY });
 const characters = [];
 const ReadingModes = Object.freeze({
     None : 0,
@@ -148,7 +149,7 @@ class CharacterRenderer{
     }
     
     renderCharacter() {
-        fs.outputFileSync('./bin/characters/' + slug(this.name) + '.md',
+        fs.outputFileSync(config.EXPORT_PATH + slug(this.name) + '.md',
             '---\n' +
             'title: '+this.name+'\n' +
             'weight: '+this.id+'\n' +
@@ -161,7 +162,7 @@ class CharacterRenderer{
     }
 }
 
-getDatabasePages('63e64e3e95564a55b740f725e90a2f5c')
+getDatabasePages(config.DATABASE_ID
     .then(pages => Promise.all(pages.map(async page => {
         var characterRenderer = await new CharacterRenderer(
             page.id, 
@@ -174,4 +175,4 @@ getDatabasePages('63e64e3e95564a55b740f725e90a2f5c')
         console.log('Rendering all characters');
         renderAllCharacters();
     })
-    .catch(err => console.error(err));
+    .catch(err => console.error(err)));
