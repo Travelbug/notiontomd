@@ -6,13 +6,30 @@ const config = require('../config.js');
 const slug = require('slug')
 
 const notion = new Client({ auth: config.NOTION_API_KEY });
+const characterPages = [];
+const groupPages = [];
+const positionPages = [];
 const characters = [];
-const ReadingModes = Object.freeze({
-    None : 0,
-    Belief : 1,
-    Playstyle : 2,
-    Done : 3
-});
+
+const puppeteer = require('puppeteer');
+
+async function generatePDF(url, outputPath) {
+    const browser = await puppeteer.launch({ headless: true, executablePath: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"});
+    const page = await browser.newPage();
+    await page.goto(url, {waitUntil: 'networkidle0'});
+    await page.$eval('.navbar', el => el.remove());
+    await page.addStyleTag({content: 'body{background: none}'})
+    await page.emulateMediaType('screen');
+    await page.pdf({ path: outputPath, width:1000, height: 1357, printBackground: true, margin: { top: '1cm', bottom: '1cm' }});
+    await browser.close();
+}
+
+function generatePDFForCharacter(character) {
+    console.log('Generating PDF for ' + character.name);
+    generatePDF('http://localhost:1313/characters/' + character.renderPath, config.EXPORT_PATH + character.renderPath + '.pdf')
+        .then(() => console.log('PDF generated successfully'))
+        .catch(err => console.error('Error generating PDF:', err));
+}
 
 async function getDatabasePages(databaseId) {
     let cursor = undefined;
@@ -47,30 +64,64 @@ function renderAllCharacters() {
     });
 }
 
+function updateWebLinks() {
+    characters.forEach(character => {
+        notion.pages.update({
+            page_id: character.pageId,
+            properties: {
+                'Weblink': {
+                    type: 'url',
+                    url: character.weblink
+                }
+            }
+        }).catch(err => console.error('Error updating weblink:', err));
+    });
+}
+
+function getPageFromId(pageId, pages) {
+    return pages.find(page => page.id === pageId);
+}
+
 class CharacterRenderer{
     pageId = "";
     name = "";
     coreBelief = "";
     id = 0;
+    title = "";
+    age = "";
+    nationality = "";
+    gender = "";
+    group = undefined;
+    position = undefined;
+    renderPath = "";
+    weblink = "";
     
     beliefDescription = "";
     playstyleDescription = "";
     
-    readingMode = ReadingModes.None;
-    constructor(pageId, name, coreBelief, id){
+    sections = [];
+    currentSection;
+    
+    constructor(pageId, name, coreBelief, id, title, age, nationality, gender, group, position){
         this.pageId = pageId;
         this.name = name;
         this.coreBelief = coreBelief;
         this.id = id;
+        this.title = title;
+        this.age = age;
+        this.nationality = nationality;
+        this.gender = gender;
+        this.group = group;
+        this.position = position;
+        this.renderPath = slug(this.group.name) + '/' + slug(this.name);
+        this.weblink = config.BASE_URL + this.renderPath;
         return this.readPageContent();
     }
     async readPageContent() {
         const content = await getPageContent(this.pageId);
+        //console.log('Reading ' + this.name);
         content.results.forEach(block => {
-            if(this.readingMode === ReadingModes.Done) {
-                return;
-            }
-            console.log("processing "+block.type);
+            //console.log('..Block ' + block.type);
             this.processPageBlock(block);
         });
         return this;
@@ -78,8 +129,13 @@ class CharacterRenderer{
     processPageBlock(block) {
         switch (block.type) {
             case 'heading_1':
-                if(this.readingMode !== ReadingModes.Done)
-                    this.readingMode++;
+                this.sections.push([]);
+                this.currentSection = this.sections[this.sections.length - 1];
+                break;
+            case 'heading_2':
+                let heading1 = this.sections[this.sections.length - 1];
+                heading1.push([]);
+                this.currentSection = heading1[heading1.length-1];
                 break;
             case 'paragraph':
                 this.processPageParagraph(block.paragraph);
@@ -97,7 +153,7 @@ class CharacterRenderer{
         
         if(text.rich_text === undefined){
             console.log('rich_text is undefined');
-            console.log(this.name + ' ' + this.readingMode);
+            console.log(this.name + ' ' + this.currentSection);
             console.log(text);
             return;
         }
@@ -107,14 +163,14 @@ class CharacterRenderer{
         text.rich_text.forEach(richtext => {
             if(richtext === undefined){
                 console.log('richtext is undefined');
-                console.log(this.name + ' ' + this.readingMode);
+                console.log(this.name + ' ' + this.currentSection);
                 console.log(text);
                 return;
             }
             
             if(richtext.annotations === undefined){
                 console.log('annotations is undefined');
-                console.log(this.name + ' ' + this.readingMode);
+                console.log(this.name + ' ' + this.currentSection);
                 console.log(richtext);
                 return;
             }
@@ -136,43 +192,149 @@ class CharacterRenderer{
         if(plaintext.startsWith('Belief:'))
             return;
         
-        switch (this.readingMode) {
-            case ReadingModes.Belief:
-                this.beliefDescription += plaintext;
-                this.beliefDescription += '\n\n';
-                break;
-            case ReadingModes.Playstyle:
-                this.playstyleDescription += plaintext;
-                this.playstyleDescription += '\n\n';
-                break;
-        }
+        if(this.currentSection === undefined)
+            return;
+        
+        this.currentSection.push(plaintext);
     }
     
     renderCharacter() {
-        fs.outputFileSync(config.EXPORT_PATH + slug(this.name) + '.md',
+        // Add headings to play style sections
+        addHeadings(this.sections[1], [
+            '###### What you will do during the game\n',
+            '###### What will you struggle with\n',
+            '###### What will help you\n',
+        ]);
+        
+        // Join all the sections into a single string
+        this.beliefDescription = joinNestedArrays(this.sections[0], '-', '\n');
+        this.playstyleDescription = joinNestedArrays(this.sections[1]);
+        
+        let beliefWords = countWords(this.beliefDescription);
+        let playstyleWords = countWords(this.playstyleDescription);
+        let totalWords = beliefWords + playstyleWords;
+        //console.log(this.beliefDescription);
+        console.log('Rendering ' + this.name);
+        //console.log('Belief: ' + countWords(this.beliefDescription) + ' words');
+        //console.log('Playstyle: ' + countWords(this.playstyleDescription) + ' words');
+        if(totalWords > 300 || totalWords < 200){
+            console.error('Total: ' + (countWords(this.beliefDescription) + countWords(this.playstyleDescription)) + ' words');
+        }else{
+            console.log('Total: ' + (countWords(this.beliefDescription) + countWords(this.playstyleDescription)) + ' words');
+        }
+        console.log('---');
+        
+        fs.outputFileSync(config.EXPORT_PATH + this.renderPath + '.md',
             '---\n' +
-            'title: '+this.name+'\n' +
+            `title: ${this.title} ${this.name}\n` +
             'weight: '+this.id+'\n' +
+            'group: '+this.group.name+'\n' +
+            'position: '+this.position.name+'\n' +
+            '_build: \n' +
+            '  list: always \n' +
             '---\n' +
-            '## ' + this.coreBelief + '\n\n' + 
-            this.beliefDescription + '\n\n' + 
-            '### Play Style\n\n' +
-            this.playstyleDescription
+            '### ' + this.group.name + ', ' + this.position.name + '\n\n' +
+            `###### ${this.age} years, ${this.nationality}, ${this.gender}\n\n` +
+            '---\n' +
+            '## Core Belief\n\n' +
+            /*'> ' + this.coreBelief + '\n' +
+            '> # ' + this.name + '\n\n' +*/
+            `#### ${this.coreBelief} \n` +
+            this.beliefDescription + '\n\n' +
+            '---\n' +
+            '## Play Style\n\n' +
+            this.playstyleDescription + '\n\n' +
+            '---\n' +
+            '## Roles\n\n' +
+            `###### ${this.group.name}\n` +
+            `- **Obligation:** ${this.group.obligation}\n` +
+            `- **Rights:** ${this.group.rights}\n` +
+            `- **Expectation:** ${this.group.expectation}\n\n` +
+            `###### ${this.position.name}\n` +
+            `- **Obligation:** ${this.position.obligation}\n` +
+            `- **Rights:** ${this.position.rights}\n` +
+            `- **Expectation:** ${this.position.expectation}\n\n`
         );
     }
 }
 
-getDatabasePages(config.DATABASE_ID
-    .then(pages => Promise.all(pages.map(async page => {
-        var characterRenderer = await new CharacterRenderer(
-            page.id, 
-            page.properties.Name.title[0]?.plain_text ?? '',
-            page.properties['Core Belief'].rich_text[0]?.plain_text ?? '',
-            page.properties['ID'].number ?? 0
-            );
-        characters.push(characterRenderer);
-    }))).then(() => {
-        console.log('Rendering all characters');
-        renderAllCharacters();
+function countWords(str) {
+    return str.trim().split(/\s+/).length;
+}
+
+function addHeadings(section, headings) {
+    section.forEach((element, i) => {
+        if (Array.isArray(element)) {
+            element.unshift(headings[i]);
+        } 
+    });
+}
+
+function joinNestedArrays(arr, before = '', after = '\n\n') {
+    let result = '';
+
+    arr.forEach(element => {
+        if (Array.isArray(element)) {
+            result += joinNestedArrays(element);
+        } else if (typeof element === 'string') {
+            result += `${before} ${element}${after}`;
+        }
+    });
+
+    return result;
+}
+
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function createRoleFromPage(rolePage){
+    return {
+        id: rolePage.id,
+        name: rolePage.properties.Name.title[0]?.plain_text ?? '',
+        obligation: rolePage.properties.Obligation.rich_text[0]?.plain_text ?? '',
+        rights: rolePage.properties.Rights.rich_text[0]?.plain_text ?? '',
+        expectation: rolePage.properties.Expectation.rich_text[0]?.plain_text ?? ''
+    }
+}
+
+/////////////////////////////
+
+getDatabasePages(config.CHARACTER_DATABASE_ID).then(pages =>{
+    characterPages.push(...pages);
+}).then(() => {
+    getDatabasePages(config.GROUP_DATABASE_ID).then(pages => {
+        groupPages.push(...pages);
+    }).then(() => {
+        getDatabasePages(config.POSITION_DATABASE_ID).then(pages => {
+            positionPages.push(...pages);
+        }).then(() => {
+            Promise.all(characterPages.map(async page => {
+                let group = getPageFromId(page.properties['Group'].relation[0]?.id, groupPages);
+                let position = getPageFromId(page.properties['Position'].relation[0]?.id, positionPages);
+                let characterRenderer = await new CharacterRenderer(
+                    page.id,
+                    page.properties.Name.title[0]?.plain_text ?? '',
+                    page.properties['Core Belief'].rich_text[0]?.plain_text ?? '',
+                    page.properties['ID'].number ?? 0,
+                    page.properties['Title'].rich_text[0]?.plain_text ?? '',
+                    page.properties['Age'].rich_text[0]?.plain_text ?? '',
+                    page.properties['Nationality'].rich_text[0]?.plain_text ?? '',
+                    page.properties['Gender'].rich_text[0]?.plain_text ?? '',
+                    createRoleFromPage(group),
+                    createRoleFromPage(position)
+                );
+                characters.push(characterRenderer);
+            })).then(() => {
+                console.log('Rendering all characters');
+                renderAllCharacters();
+                updateWebLinks();
+                wait(5000).then(() => {
+                    // Test character rendering for the first character
+                    var character = characters.find(character => character.id === 1);
+                    generatePDFForCharacter(character);
+                });
+            })
+        })
     })
-    .catch(err => console.error(err)));
+}).catch(err => console.error(err));

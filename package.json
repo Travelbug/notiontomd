@@ -24,6 +24,8 @@
   "dependencies": {
     "@notionhq/client": "^2.2.15",
     "fs-extra": "^11.2.0",
+    "html-pdf-node": "^1.0.8",
+    "puppeteer": "^22.9.0",
     "slug": "^9.0.0"
   }
 }
