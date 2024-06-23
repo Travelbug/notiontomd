@@ -233,7 +233,7 @@ class CharacterRenderer{
             '_build: \n' +
             '  list: always \n' +
             '---\n' +
-            '### ' + this.group.name + ', ' + this.position.name + '\n\n' +
+            `### ${this.group.name}, ${this.position.name}\n\n` +
             `###### ${this.age} years, ${this.nationality}, ${this.gender}\n\n` +
             '---\n' +
             '## Core Belief\n\n' +
