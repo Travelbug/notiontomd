@@ -9,6 +9,8 @@ const notion = new Client({ auth: config.NOTION_API_KEY });
 const characterPages = [];
 const groupPages = [];
 const positionPages = [];
+const relationPages = [];
+const castingPages = [];
 const characters = [];
 
 const puppeteer = require('puppeteer');
@@ -298,43 +300,192 @@ function createRoleFromPage(rolePage){
     }
 }
 
-/////////////////////////////
-
-getDatabasePages(config.CHARACTER_DATABASE_ID).then(pages =>{
-    characterPages.push(...pages);
-}).then(() => {
-    getDatabasePages(config.GROUP_DATABASE_ID).then(pages => {
-        groupPages.push(...pages);
+function createMarkdown() {
+    getDatabasePages(config.CHARACTER_DATABASE_ID).then(pages => {
+        characterPages.push(...pages);
     }).then(() => {
-        getDatabasePages(config.POSITION_DATABASE_ID).then(pages => {
-            positionPages.push(...pages);
+        getDatabasePages(config.GROUP_DATABASE_ID).then(pages => {
+            groupPages.push(...pages);
         }).then(() => {
-            Promise.all(characterPages.map(async page => {
-                let group = getPageFromId(page.properties['Group'].relation[0]?.id, groupPages);
-                let position = getPageFromId(page.properties['Position'].relation[0]?.id, positionPages);
-                let characterRenderer = await new CharacterRenderer(
-                    page.id,
-                    page.properties.Name.title[0]?.plain_text ?? '',
-                    page.properties['Core Belief'].rich_text[0]?.plain_text ?? '',
-                    page.properties['ID'].number ?? 0,
-                    page.properties['Title'].rich_text[0]?.plain_text ?? '',
-                    page.properties['Age'].rich_text[0]?.plain_text ?? '',
-                    page.properties['Nationality'].rich_text[0]?.plain_text ?? '',
-                    page.properties['Gender'].rich_text[0]?.plain_text ?? '',
-                    createRoleFromPage(group),
-                    createRoleFromPage(position)
-                );
-                characters.push(characterRenderer);
-            })).then(() => {
-                console.log('Rendering all characters');
-                renderAllCharacters();
-                updateWebLinks();
-                wait(5000).then(() => {
-                    // Test character rendering for the first character
-                    var character = characters.find(character => character.id === 1);
-                    generatePDFForCharacter(character);
-                });
+            getDatabasePages(config.POSITION_DATABASE_ID).then(pages => {
+                positionPages.push(...pages);
+            }).then(() => {
+                Promise.all(characterPages.map(async page => {
+                    let group = getPageFromId(page.properties['Group'].relation[0]?.id, groupPages);
+                    let position = getPageFromId(page.properties['Position'].relation[0]?.id, positionPages);
+                    let characterRenderer = await new CharacterRenderer(
+                        page.id,
+                        page.properties.Name.title[0]?.plain_text ?? '',
+                        page.properties['Core Belief'].rich_text[0]?.plain_text ?? '',
+                        page.properties['ID'].number ?? 0,
+                        page.properties['Title'].rich_text[0]?.plain_text ?? '',
+                        page.properties['Age'].rich_text[0]?.plain_text ?? '',
+                        page.properties['Nationality'].rich_text[0]?.plain_text ?? '',
+                        page.properties['Gender'].rich_text[0]?.plain_text ?? '',
+                        createRoleFromPage(group),
+                        createRoleFromPage(position)
+                    );
+                    characters.push(characterRenderer);
+                })).then(() => {
+                    console.log('Rendering all characters');
+                    renderAllCharacters();
+                    updateWebLinks();
+                    wait(5000).then(() => {
+                        // Test character rendering for the first character
+                        var character = characters.find(character => character.id === 1);
+                        generatePDFForCharacter(character);
+                    });
+                })
             })
         })
-    })
-}).catch(err => console.error(err));
+    }).catch(err => console.error(err));
+}
+
+function createRelations() {
+    getDatabasePages(config.CHARACTER_DATABASE_ID).then(pages => {
+        characterPages.push(...pages);
+    }).then(() => {
+        getDatabasePages(config.RELATION_DATABASE_ID).then(pages => {
+            relationPages.push(...pages);
+        }).then(() => {
+            getDatabasePages(config.GROUP_DATABASE_ID).then(pages => {
+                groupPages.push(...pages);
+            }).then(()=>{
+                getDatabasePages(config.CASTING_DATABASE_ID).then(pages => {
+                    castingPages.push(...pages);
+                }).then(() => {
+                    writeRelations(characterPages, relationPages);
+                })
+            })
+        })
+    }).catch(err => console.error(err));
+}
+
+function writeRelations(characterPages, relationPages) {
+    
+    let nodedataArray = [];
+    let linkDataArray = [];
+    
+    characterPages.forEach(characterPage => {
+        nodedataArray.push({
+            id: characterPage.id,
+            text: characterPage.properties.Name.title[0]?.plain_text,
+            belief: characterPage.properties['Core Belief'].rich_text[0]?.plain_text,
+            group: getPageFromId(characterPage.properties['Group'].relation[0]?.id,groupPages)?.properties.Name.title[0]?.plain_text,
+        });
+    });
+
+    nodedataArray.sort((a, b) => {
+        if (a.group < b.group) return -1;
+        if (a.group > b.group) return 1;
+        return 0;
+    });
+    
+    relationPages.forEach(relationPage => {
+        linkDataArray.push({
+            from: relationPage.properties['From'].relation[0]?.id,
+            to: relationPage.properties['Towards'].relation[0]?.id,
+            text: relationPage.properties['Active Relationship Description'].rich_text[0]?.plain_text ?? '',
+            type: 'relation',
+        });
+    });
+    
+    //flags
+    castingPages.forEach(castingPage => {
+        castingPage.properties[ 'Flags Negatively' ].relation.forEach(flag => {
+            let flaggedCharacter = getPageFromId(flag.id, castingPages).properties[ 'Character' ].relation[0]?.id;
+            let flaggingCharacter = castingPage.properties[ 'Character' ].relation[0]?.id;
+            linkDataArray.push({
+                from: flaggingCharacter,
+                to: flaggedCharacter,
+                text: '',
+                type: 'flag',
+            });
+        });
+    });
+    
+    //wishes
+    castingPages.forEach(castingPage => {
+        castingPage.properties[ 'Flags Positively' ].relation.forEach(wish => {
+
+            //only counts if also flagged positively by the other character
+            let wishedPage = getPageFromId(wish.id, castingPages);
+            if(wishedPage.properties[ 'Flags Positively' ].relation.find(wish => wish.id === castingPage.id) === undefined)
+                return;
+
+            let wishedCharacter = wishedPage.properties[ 'Character' ].relation[0]?.id;
+            let wishingCharacter = castingPage.properties[ 'Character' ].relation[0]?.id;
+            
+            //only add the relation if it doesn't already exist
+            if(linkDataArray.find(link => link.from === wishingCharacter && link.to === wishedCharacter || link.from === wishedCharacter && link.to === wishingCharacter) !== undefined)
+                return;
+            
+            linkDataArray.push({
+                from: wishingCharacter,
+                to: wishedCharacter,
+                text: '',
+                type: 'wish',
+            });
+        });
+    });
+    
+    fs.outputFileSync(config.RELATIONS_PATH + 'relations.json', '' +
+        '{ "class": "go.GraphLinksModel",\n' +
+        '  "nodeKeyProperty": "id",\n' +
+        '  "nodeDataArray": ' + JSON.stringify(nodedataArray) + ',\n' +
+        '  "linkDataArray": ' + JSON.stringify(linkDataArray) + '\n' +
+        '}'
+    );
+    /*
+    { "class": "go.GraphLinksModel",
+  "nodeKeyProperty": "id",
+  "nodeDataArray": [
+    {"id":-1, "loc":"155 -150", "type":"Start", "text":"Start" },
+    {"id":0, "loc":"190 15", "text":"Shopping"},
+    {"id":1, "loc":"353 32", "text":"Browse Items"},
+    {"id":2, "loc":"353 166", "text":"Search Items"},
+    {"id":3, "loc":"552 12", "text":"View Item"},
+    {"id":4, "loc":"700 -95", "text":"View Cart"},
+    {"id":5, "loc":"660 100", "text":"Update Cart"},
+    {"id":6, "loc":"850 20", "text":"Checkout"},
+    {"id":-2, "loc":"830 200", "type":"End", "text":"End" }
+  ],
+  "linkDataArray": [
+    { "from": -1, "to": 0, "progress": true, "text": "Visit online store", "curviness": -10 },
+    { "from": 0, "to": 1,  "progress": true, "text": "Browse" },
+    { "from": 0, "to": 2,  "progress": true, "text": "Use search bar", "curviness": -70 },
+    { "from": 1, "to": 2,  "progress": true, "text": "Use search bar" },
+    { "from": 2, "to": 3,  "progress": true, "text": "Click item", "curviness": -70 },
+    { "from": 2, "to": 2,  "progress": false, "text": "Another search", "curviness": 40 },
+    { "from": 1, "to": 3,  "progress": true, "text": "Click item" },
+    { "from": 3, "to": 0,  "progress": false, "text": "Not interested", "curviness": -100 },
+    { "from": 3, "to": 4,  "progress": true, "text": "Add to cart" },
+    { "from": 4, "to": 0,  "progress": false, "text": "More shopping", "curviness": -150 },
+    { "from": 4, "to": 5,  "progress": false, "text": "Update needed", "curviness": 70 },
+    { "from": 5, "to": 4,  "progress": false, "text": "Update made" },
+    { "from": 4, "to": 6,  "progress": true, "text": "Proceed" },
+    { "from": 6, "to": 5,  "progress": false, "text": "Update needed"},
+    { "from": 6, "to": -2, "progress": true, "text": "Purchase made" }
+  ]
+}
+    */
+}
+
+/////////////////////////////
+
+const args = process.argv.slice(2);  // Remove the first two elements
+if (args.length > 0) {
+    switch (args[0]) {
+        case 'markdown':
+            createMarkdown();
+            break;
+        case 'relations':
+            createRelations();
+            break;
+        default:
+            console.log(`Unknown function: ${args[0]}`);
+            break;
+    }
+} else {
+    createMarkdown()
+}
