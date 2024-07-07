@@ -2,8 +2,25 @@
 
 const { Client } = require('@notionhq/client');
 const fs = require('fs-extra')
-const config = require('../config.js');
 const slug = require('slug')
+let config;
+
+try {
+    config = require('../config.js');
+} catch (error) {
+    console.log('config.js not found, using environment variables.');
+    config = {
+        NOTION_API_KEY: process.env.NOTION_API_KEY,
+        CHARACTER_DATABASE_ID: process.env.CHARACTER_DATABASE_ID,
+        GROUP_DATABASE_ID: process.env.GROUP_DATABASE_ID,
+        POSITION_DATABASE_ID: process.env.POSITION_DATABASE_ID,
+        RELATION_DATABASE_ID: process.env.RELATION_DATABASE_ID,
+        CASTING_DATABASE_ID: process.env.CASTING_DATABASE_ID,
+        EXPORT_PATH: process.env.EXPORT_PATH,
+        RELATIONS_PATH: process.env.RELATIONS_PATH,
+        BASE_URL: process.env.BASE_URL
+    };
+}
 
 const notion = new Client({ auth: config.NOTION_API_KEY });
 let characterPages = [];
