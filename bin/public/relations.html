@@ -97,62 +97,7 @@
           }).bind('text', 'belief')
         )
       );
-
-    // unlike the normal selection Adornment, this one includes a Button
-    /*myDiagram.nodeTemplate.selectionAdornmentTemplate = new go.Adornment('Spot')
-      .add(
-        new go.Panel('Auto')
-          .add(
-            new go.Shape('RoundedRectangle', { fill: null, stroke: colors.pink, strokeWidth: 3 }),
-            new go.Placeholder() // a Placeholder sizes itself to the selected Node
-          ),
-
-        // the button to create a "next" node, at the top-right corner
-        go.GraphObject.build('Button', {
-            alignment: go.Spot.TopRight,
-            click: addNodeAndLink, // this function is defined below
-          })
-          .add(
-            new go.Shape('PlusLine', { width: 6, height: 6 })
-          ) // end button
-      );*/
-
-    // clicking the button inserts a new node to the right of the selected node,
-    // and adds a link to that new node
-    /*function addNodeAndLink(e, obj) {
-      var adornment = obj.part;
-      var diagram = e.diagram;
-      diagram.startTransaction('Add State');
-
-      // get the node data for which the user clicked the button
-      var fromNode = adornment.adornedPart;
-      var fromData = fromNode.data;
-      // create a new "State" data object, positioned off to the right of the adorned Node
-      var toData = { text: 'new' };
-      var p = fromNode.location.copy();
-      p.x += 200;
-      toData.loc = go.Point.stringify(p); // the "loc" property is a string, not a Point object
-      // add the new node data to the model
-      var model = diagram.model;
-      model.addNodeData(toData);
-
-      // create a link data from the old node data to the new node data
-      var linkdata = {
-        from: model.getKeyForNodeData(fromData), // or just: fromData.id
-        to: model.getKeyForNodeData(toData),
-        text: 'transition',
-      };
-      // and add the link data to the model
-      model.addLinkData(linkdata);
-
-      // select the new Node
-      var newnode = diagram.findNodeForData(toData);
-      diagram.select(newnode);
-      diagram.commitTransaction('Add State');
-      // if the new node is off-screen, scroll the diagram to show the new node
-      diagram.scrollToRect(newnode.actualBounds);
-    }*/
-
+    
     // replace the default Link template in the linkTemplateMap
     myDiagram.linkTemplate = new go.Link({
       // shadow options are for the label, not the link itself
@@ -211,6 +156,9 @@
 
     // Show label when mouse hovers over link
     myDiagram.linkTemplate.mouseEnter = function(e, link) {
+      
+      link.layerName = 'Foreground';
+      
       var label = link.findObject('Label');
       if (label !== null) {
         label.maxSize = new go.Size(200, NaN);
@@ -220,6 +168,9 @@
 
     // Hide label when mouse leaves link
     myDiagram.linkTemplate.mouseLeave = function(e, link) {
+      
+      link.layerName = '';
+      
       var label = link.findObject('Label');
       if (label !== null) {
         label.maxSize = new go.Size(80, 30);
@@ -231,6 +182,14 @@
     load();
   }
 
+  function updateRoutes() {
+    myDiagram.startTransaction('invalidate routes');
+    myDiagram.links.each(function(link) {
+      link.invalidateRoute();
+    });
+    myDiagram.commitTransaction('invalidate routes');
+  }
+  
   // Show the diagram's model in JSON format
   function save() {
     var nodeDataArray = [];
@@ -276,6 +235,7 @@
       }
     });
     myDiagram.commitTransaction('update positions');
+    updateRoutes();
   }
 
   window.addEventListener('DOMContentLoaded', init);
