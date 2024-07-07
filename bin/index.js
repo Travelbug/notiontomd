@@ -6,12 +6,12 @@ const config = require('../config.js');
 const slug = require('slug')
 
 const notion = new Client({ auth: config.NOTION_API_KEY });
-const characterPages = [];
-const groupPages = [];
-const positionPages = [];
-const relationPages = [];
-const castingPages = [];
-const characters = [];
+let characterPages = [];
+let groupPages = [];
+let positionPages = [];
+let relationPages = [];
+let castingPages = [];
+let characters = [];
 
 const puppeteer = require('puppeteer');
 
@@ -341,8 +341,25 @@ function createMarkdown() {
     }).catch(err => console.error(err));
 }
 
-function createRelations() {
-    getDatabasePages(config.CHARACTER_DATABASE_ID).then(pages => {
+function fetchRelationsData() {
+    return new Promise((resolve, reject) => {
+        Promise.all([
+            getDatabasePages(config.CHARACTER_DATABASE_ID),
+            getDatabasePages(config.RELATION_DATABASE_ID),
+            getDatabasePages(config.GROUP_DATABASE_ID),
+            getDatabasePages(config.CASTING_DATABASE_ID)
+        ]).then(values => {
+            characterPages = values[0];
+            relationPages = values[1];
+            groupPages = values[2];
+            castingPages = values[3];
+            resolve();
+        }).catch(err=>{
+            console.error(err);
+            reject(err);
+        });
+    });
+    /*getDatabasePages(config.CHARACTER_DATABASE_ID).then(pages => {
         characterPages.push(...pages);
     }).then(() => {
         getDatabasePages(config.RELATION_DATABASE_ID).then(pages => {
@@ -358,14 +375,13 @@ function createRelations() {
                 })
             })
         })
-    }).catch(err => console.error(err));
+    }).catch(err => console.error(err));*/
 }
 
-function writeRelations(characterPages, relationPages) {
-    
+function createRelationJSON(characterPages, relationPages) {
     let nodedataArray = [];
     let linkDataArray = [];
-    
+
     characterPages.forEach(characterPage => {
         nodedataArray.push({
             id: characterPage.id,
@@ -380,16 +396,17 @@ function writeRelations(characterPages, relationPages) {
         if (a.group > b.group) return 1;
         return 0;
     });
-    
+
     relationPages.forEach(relationPage => {
         linkDataArray.push({
             from: relationPage.properties['From'].relation[0]?.id,
             to: relationPage.properties['Towards'].relation[0]?.id,
             text: relationPage.properties['Active Relationship Description'].rich_text[0]?.plain_text ?? '',
             type: 'relation',
+            length: 50,
         });
     });
-    
+
     //flags
     castingPages.forEach(castingPage => {
         castingPage.properties[ 'Flags Negatively' ].relation.forEach(flag => {
@@ -400,10 +417,11 @@ function writeRelations(characterPages, relationPages) {
                 to: flaggedCharacter,
                 text: '',
                 type: 'flag',
+                length: 400,
             });
         });
     });
-    
+
     //wishes
     castingPages.forEach(castingPage => {
         castingPage.properties[ 'Flags Positively' ].relation.forEach(wish => {
@@ -415,27 +433,34 @@ function writeRelations(characterPages, relationPages) {
 
             let wishedCharacter = wishedPage.properties[ 'Character' ].relation[0]?.id;
             let wishingCharacter = castingPage.properties[ 'Character' ].relation[0]?.id;
-            
+
             //only add the relation if it doesn't already exist
             if(linkDataArray.find(link => link.from === wishingCharacter && link.to === wishedCharacter || link.from === wishedCharacter && link.to === wishingCharacter) !== undefined)
                 return;
-            
+
             linkDataArray.push({
                 from: wishingCharacter,
                 to: wishedCharacter,
                 text: '',
                 type: 'wish',
+                length: 200,
             });
         });
     });
     
-    fs.outputFileSync(config.RELATIONS_PATH + 'relations.json', '' +
-        '{ "class": "go.GraphLinksModel",\n' +
-        '  "nodeKeyProperty": "id",\n' +
-        '  "nodeDataArray": ' + JSON.stringify(nodedataArray) + ',\n' +
-        '  "linkDataArray": ' + JSON.stringify(linkDataArray) + '\n' +
-        '}'
-    );
+    return '' +        
+    '{ "class": "go.GraphLinksModel",\n' +
+    '  "nodeKeyProperty": "id",\n' +
+    '  "nodeDataArray": ' + JSON.stringify(nodedataArray) + ',\n' +
+    '  "linkDataArray": ' + JSON.stringify(linkDataArray) + '\n' +
+    '}'
+}
+
+function writeRelations(characterPages, relationPages) {
+    fetchRelationsData().then(() => {
+        let json = createRelationJSON(characterPages, relationPages);
+        fs.outputFileSync(config.RELATIONS_PATH + 'relations.json', json);
+    });
     /*
     { "class": "go.GraphLinksModel",
   "nodeKeyProperty": "id",
@@ -471,6 +496,65 @@ function writeRelations(characterPages, relationPages) {
     */
 }
 
+// Use port number from the PORT environment variable or 3000 if not specified
+const port = process.env.PORT || 3000;
+const path = require('path');
+const http = require('node:http');
+var server;
+const publicDirectoryPath = path.join(__dirname, 'public');
+
+listener = function (request, response) {
+    console.log('Request received for ' + request.url);
+    
+    if(request.url === '/relations'){
+        response.writeHead(200, {'Content-Type': 'application/json'});
+        fetchRelationsData().then(() => {
+            let json = createRelationJSON(characterPages, relationPages);
+            response.end(json);
+            console.log('Serving json ' + json);
+        });
+        return;
+    }
+    
+    let filePath = path.join(publicDirectoryPath, request.url);
+    console.log('Serving file ' + filePath);
+    fs.exists(filePath, (exists) => {
+        if (!exists) {
+            response.writeHead(404, {'Content-Type': 'text/html'});
+            response.end('<h1>404 Not Found</h1>');
+            return;
+        }
+
+        fs.readFile(filePath, (err, data) => {
+            if (err) {
+                response.writeHead(500);
+                response.end('Error loading file');
+                return;
+            }
+
+            // Optional: Set Content-Type based on the file extension
+            const ext = path.extname(filePath);
+            let contentType = 'text/html'; // default to HTML
+            switch (ext) {
+                case '.json':
+                    contentType = 'application/json';
+                    break;
+                // Add more cases for other content types as needed
+            }
+
+            response.writeHead(200, {'Content-Type': contentType});
+            response.end(data);
+        });
+    });
+};
+
+function startServer() {
+    server = http.createServer(listener);
+    server.listen(port);
+    console.log('Server running at http://127.0.0.1:3000/');
+}
+
+
 /////////////////////////////
 
 const args = process.argv.slice(2);  // Remove the first two elements
@@ -480,12 +564,12 @@ if (args.length > 0) {
             createMarkdown();
             break;
         case 'relations':
-            createRelations();
+            fetchRelationsData();
             break;
         default:
             console.log(`Unknown function: ${args[0]}`);
             break;
     }
 } else {
-    createMarkdown()
+    startServer()
 }

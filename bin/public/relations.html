@@ -233,16 +233,49 @@
 
   // Show the diagram's model in JSON format
   function save() {
-    document.getElementById('mySavedModel').value = myDiagram.model.toJson();
-    myDiagram.isModified = false;
+    var nodeDataArray = [];
+    myDiagram.nodes.each(function(node) {
+      nodeDataArray.push({
+        key: node.key,
+        loc: node.location.x + " " + node.location.y
+      });
+    });
+
+    var blob = new Blob([JSON.stringify(nodeDataArray)], {type: "application/json"});
+    var url = URL.createObjectURL(blob);
+
+    var downloadLink = document.createElement('a');
+    downloadLink.href = url;
+    downloadLink.download = 'positions.json';
+
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);    myDiagram.isModified = false;
   }
   function load() {
-    fetch('./relations.json')
+    fetch('./relations')
             .then(response => response.json())
             .then(data => {
               myDiagram.model = go.Model.fromJson(JSON.stringify(data));
             })
+            .then(() => loadPositions())
             .catch(error => console.error('Error:', error));
+  }
+
+  async function loadPositions() {
+    const response = await fetch('./positions.json');
+    const data = await response.json();
+
+    myDiagram.startTransaction('update positions');
+    data.forEach(function(nodeData) {
+      var node = myDiagram.findNodeForKey(nodeData.key);
+      if (node !== null) {
+        console.log(nodeData.loc);
+        node.location = go.Point.parse(nodeData.loc);
+        console.log(node.location);
+      }
+    });
+    myDiagram.commitTransaction('update positions');
   }
 
   window.addEventListener('DOMContentLoaded', init);
