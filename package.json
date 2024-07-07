@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "converts notion pages to markdown for a static website generator using the notion API",
   "main": "bin/index.js",
-  "start": "npm run build && node ./bin/index.js",
+  "scripts": {
+    "start": "node ./bin/index.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Travelbug/notiontomd.git"
