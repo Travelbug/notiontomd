@@ -23,6 +23,7 @@
   "homepage": "https://github.com/Travelbug/notiontomd#readme",
   "dependencies": {
     "@notionhq/client": "^2.2.15",
+    "express": "^4.19.2",
     "fs-extra": "^11.2.0",
     "html-pdf-node": "^1.0.8",
     "puppeteer": "^22.9.0",

@@ -516,11 +516,40 @@ function writeRelations(characterPages, relationPages) {
 // Use port number from the PORT environment variable or 3000 if not specified
 const port = process.env.PORT || 3000;
 const path = require('path');
-const http = require('node:http');
-var server;
+const express = require('express');
+const app = express();
+
 const publicDirectoryPath = path.join(__dirname, 'public');
 
-listener = function (request, response) {
+app.use(express.static(publicDirectoryPath));
+app.get('/relations', (req, res) => {
+    res.writeHead(200, {'Content-Type': 'application/json'});
+    fetchRelationsData().then(() => {
+        let json = createRelationJSON(characterPages, relationPages);
+        res.end(json);
+        console.log('Serving json ' + json);
+    });
+});
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(publicDirectoryPath, 'relations.html'));
+});
+
+app.use(express.json());
+app.post('/savePositions', (req, res) => {
+    const nodeData = req.body;
+    const filePath = path.join(publicDirectoryPath, 'positions.json');
+
+    fs.writeFile(filePath, JSON.stringify(nodeData, null, 2), (err) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).send('Error saving nodes to file');
+        }
+        console.log('Positions saved to ' + filePath);
+    });
+});
+
+/*listener = function (request, response) {
     console.log('Request received for ' + request.url);
     
     if(request.url === '/relations'){
@@ -563,12 +592,15 @@ listener = function (request, response) {
             response.end(data);
         });
     });
-};
+};*/
 
 function startServer() {
-    server = http.createServer(listener);
+    /*server = http.createServer(listener);
     server.listen(port);
-    console.log('Server running at http://127.0.0.1:3000/');
+    console.log('Server running at http://127.0.0.1:3000/');*/
+    app.listen(port, () => {
+        console.log(`Server running at http://localhost:${port}/`);
+    });
 }
 
 

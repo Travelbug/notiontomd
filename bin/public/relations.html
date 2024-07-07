@@ -200,16 +200,22 @@
       });
     });
 
-    var blob = new Blob([JSON.stringify(nodeDataArray)], {type: "application/json"});
-    var url = URL.createObjectURL(blob);
+    const jsonString = JSON.stringify(nodeDataArray);
+    console.log(jsonString);
+    
+    // Send the node data to the server
+    fetch('/savePositions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonString,
+    })
+    .catch((error) => {
+      console.error('Error:', error);
+    });
 
-    var downloadLink = document.createElement('a');
-    downloadLink.href = url;
-    downloadLink.download = 'positions.json';
-
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);    myDiagram.isModified = false;
+    myDiagram.isModified = false;
   }
   function load() {
     fetch('./relations')
