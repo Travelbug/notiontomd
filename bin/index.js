@@ -400,11 +400,13 @@ function createRelationJSON(characterPages, relationPages) {
     let linkDataArray = [];
 
     characterPages.forEach(characterPage => {
+        let name = (characterPage.properties.Title.rich_text[0]?.plain_text ?? '') + ' ' + characterPage.properties.Name.title[0]?.plain_text;
         nodedataArray.push({
             id: characterPage.id,
-            text: characterPage.properties.Name.title[0]?.plain_text,
+            text: name.trim(),
             belief: characterPage.properties['Core Belief'].rich_text[0]?.plain_text,
             group: getPageFromId(characterPage.properties['Group'].relation[0]?.id,groupPages)?.properties.Name.title[0]?.plain_text,
+            nationality: characterPage.properties.Nationality.rich_text[0]?.plain_text
         });
     });
 

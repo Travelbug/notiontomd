@@ -65,23 +65,34 @@
       toLinkable: false,
     })
       .bindTwoWay('location', 'loc', go.Point.parse, go.Point.stringify)
-      .add(
+      .add( // main node shape
+              
         new go.Shape('RoundedRectangle', {
           strokeWidth: 1.5,
           fill: colors.blue,
+          clipToBounds: false,
+          marginTop:15,
         })
-          .bind('fill', 'group', (group) => {
-            if (group === 'Officer') return colors.blue;
-            if (group === 'Crew') return colors.pink;
-            if (group === 'Explorer') return colors.yellow;
-            if (group === 'Settler') return colors.green;
-            return colors.background;
-          })
-          .bind('figure', 'type', (type) => {
-            if (type === 'Start' || type === 'End') return 'Circle';
-            return 'RoundedRectangle';
-          }),
+        .bind('fill', 'group', (group) => {
+          if (group === 'Officer') return colors.blue;
+          if (group === 'Crew') return colors.pink;
+          if (group === 'Explorer') return colors.yellow;
+          if (group === 'Settler') return colors.green;
+          return colors.background;
+        })
+        .bind('figure', 'type', (type) => {
+          if (type === 'Start' || type === 'End') return 'Circle';
+          return 'RoundedRectangle';
+        }),
         new go.Panel('Vertical').add(
+          new go.Picture({
+            width: 20,
+            height: 20,
+            margin: 2,
+          })
+          .bind('source', 'nationality', (nationality) => {
+            return `./img/flag_icon_${nationality.toLowerCase()}.png`;
+          }),
           new go.TextBlock({
             font: 'bold small-caps 11pt helvetica, bold arial, sans-serif',
             shadowVisible: false,
@@ -94,10 +105,9 @@
             stroke: '#333',
             margin: 4,
             maxSize: new go.Size(130, NaN),
-          }).bind('text', 'belief')
+          }).bind('text', 'belief'),
         )
       );
-    
     // replace the default Link template in the linkTemplateMap
     myDiagram.linkTemplate = new go.Link({
       // shadow options are for the label, not the link itself
@@ -235,9 +245,7 @@
     data.forEach(function(nodeData) {
       var node = myDiagram.findNodeForKey(nodeData.key);
       if (node !== null) {
-        console.log(nodeData.loc);
         node.location = go.Point.parse(nodeData.loc);
-        console.log(node.location);
       }
     });
     myDiagram.commitTransaction('update positions');
