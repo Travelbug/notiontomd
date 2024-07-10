@@ -376,23 +376,6 @@ function fetchRelationsData() {
             reject(err);
         });
     });
-    /*getDatabasePages(config.CHARACTER_DATABASE_ID).then(pages => {
-        characterPages.push(...pages);
-    }).then(() => {
-        getDatabasePages(config.RELATION_DATABASE_ID).then(pages => {
-            relationPages.push(...pages);
-        }).then(() => {
-            getDatabasePages(config.GROUP_DATABASE_ID).then(pages => {
-                groupPages.push(...pages);
-            }).then(()=>{
-                getDatabasePages(config.CASTING_DATABASE_ID).then(pages => {
-                    castingPages.push(...pages);
-                }).then(() => {
-                    writeRelations(characterPages, relationPages);
-                })
-            })
-        })
-    }).catch(err => console.error(err));*/
 }
 
 function createRelationJSON(characterPages, relationPages) {
@@ -406,7 +389,8 @@ function createRelationJSON(characterPages, relationPages) {
             text: name.trim(),
             belief: characterPage.properties['Core Belief'].rich_text[0]?.plain_text,
             group: getPageFromId(characterPage.properties['Group'].relation[0]?.id,groupPages)?.properties.Name.title[0]?.plain_text,
-            nationality: characterPage.properties.Nationality.rich_text[0]?.plain_text
+            nationality: characterPage.properties.Nationality.rich_text[0]?.plain_text,
+            pageUrl: characterPage.url
         });
     });
 
@@ -423,6 +407,7 @@ function createRelationJSON(characterPages, relationPages) {
             text: relationPage.properties['Active Relationship Description'].rich_text[0]?.plain_text ?? '',
             type: 'relation',
             length: 50,
+            pageUrl: relationPage.url
         });
     });
 
@@ -550,52 +535,6 @@ app.post('/savePositions', (req, res) => {
         console.log('Positions saved to ' + filePath);
     });
 });
-
-/*listener = function (request, response) {
-    console.log('Request received for ' + request.url);
-    
-    if(request.url === '/relations'){
-        response.writeHead(200, {'Content-Type': 'application/json'});
-        fetchRelationsData().then(() => {
-            let json = createRelationJSON(characterPages, relationPages);
-            response.end(json);
-            console.log('Serving json ' + json);
-        });
-        return;
-    }
-    
-    let filePath = path.join(publicDirectoryPath, request.url);
-    console.log('Serving file ' + filePath);
-    fs.exists(filePath, (exists) => {
-        if (!exists) {
-            response.writeHead(404, {'Content-Type': 'text/html'});
-            response.end('<h1>404 Not Found</h1>');
-            return;
-        }
-
-        fs.readFile(filePath, (err, data) => {
-            if (err) {
-                response.writeHead(500);
-                response.end('Error loading file');
-                return;
-            }
-
-            // Optional: Set Content-Type based on the file extension
-            const ext = path.extname(filePath);
-            let contentType = 'text/html'; // default to HTML
-            switch (ext) {
-                case '.json':
-                    contentType = 'application/json';
-                    break;
-                // Add more cases for other content types as needed
-            }
-
-            response.writeHead(200, {'Content-Type': contentType});
-            response.end(data);
-        });
-    });
-};*/
-
 function startServer() {
     /*server = http.createServer(listener);
     server.listen(port);

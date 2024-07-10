@@ -63,10 +63,14 @@
       shadowColor: 'black',
       fromLinkable: false,
       toLinkable: false,
+      doubleClick: function (e, node) {
+        let link = node.data.pageUrl.replace("https","notion");
+        console.log(`Opening ${link}`);
+        window.open(link, '_blank');
+      },
     })
       .bindTwoWay('location', 'loc', go.Point.parse, go.Point.stringify)
       .add( // main node shape
-              
         new go.Shape('RoundedRectangle', {
           strokeWidth: 1.5,
           fill: colors.blue,
@@ -123,6 +127,12 @@
       relinkableTo: false,
       fromShortLength: 8,
       toShortLength: 10,
+      doubleClick: function (e, link) {
+        if(link.data.pageUrl === undefined) return;
+        let url = link.data.pageUrl.replace("https","notion");
+        console.log(`Opening ${url}`);
+        window.open(url, '_blank');
+      },
     })
       .bindTwoWay('points')
       .bind('curviness')
@@ -158,7 +168,7 @@
             maxSize: new go.Size(80, NaN),
             maxLines: 1,
             visible: true,
-            editable: true, // enable in-place editing
+            editable: false, // enable in-place editing
           }).bind('text')
           // editing the text automatically updates the model data
         ).bind('visible', 'type', (type) => type === 'relation')
