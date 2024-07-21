@@ -255,7 +255,7 @@
   }
 
   async function loadPositions() {
-    const response = await fetch('./positions.json');
+    const response = await fetch('/positions');
     const data = await response.json();
 
     myDiagram.startTransaction('update positions');

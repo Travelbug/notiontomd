@@ -18,7 +18,9 @@ try {
         CASTING_DATABASE_ID: process.env.CASTING_DATABASE_ID,
         EXPORT_PATH: process.env.EXPORT_PATH,
         RELATIONS_PATH: process.env.RELATIONS_PATH,
-        BASE_URL: process.env.BASE_URL
+        BASE_URL: process.env.BASE_URL,
+        MONGODB_URL: process.env.MONGODB_URL,
+
     };
 }
 
@@ -500,10 +502,58 @@ function writeRelations(characterPages, relationPages) {
     */
 }
 
+const { MongoClient } = require('mongodb');
+const client = new MongoClient(config.MONGODB_URL);
+const collectionName = 'positions';
+async function savePositionsToMongoDB(nodeData) {
+    try {
+        await client.connect();
+        console.log('Connected successfully to MongoDB server');
+        const db = client.db();
+        const collection = db.collection(collectionName);
+
+        for (const node of nodeData) {
+            const filter = { key: node.key }; // Use the "key" property as the filter
+            const update = { $set: node }; // Set the document to the node data
+            const options = { upsert: true }; // Enable upsert option
+
+            // Perform the upsert operation
+            const result = await collection.updateOne(filter, update, options);
+            console.log(`Upserted document with key ${node.key}: matched ${result.matchedCount}, modified ${result.modifiedCount}, upsertedId ${result.upsertedId}`);
+        }
+        
+    } catch (err) {
+        console.error('Failed to save positions to MongoDB:', err);
+    } finally {
+        await client.close();
+    }
+}
+
+async function fetchPositionsFromMongoDB() {
+    try {
+        await client.connect();
+        console.log('Connected successfully to MongoDB server');
+        const db = client.db();
+        const collection = db.collection(collectionName);
+
+        // Fetch all documents in the collection
+        const positions = await collection.find({}).toArray();
+        console.log('Positions fetched successfully');
+
+        return positions; // Return the fetched positions
+    } catch (err) {
+        console.error('Failed to fetch positions from MongoDB:', err);
+        return []; // Return an empty array in case of error
+    } finally {
+        await client.close();
+    }
+}
+
 // Use port number from the PORT environment variable or 3000 if not specified
 const port = process.env.PORT || 3000;
 const path = require('path');
 const express = require('express');
+const {MONGODB_URL} = require("../config");
 const app = express();
 
 const publicDirectoryPath = path.join(__dirname, 'public');
@@ -523,17 +573,25 @@ app.get('/', (req, res) => {
 });
 
 app.use(express.json());
+app.get('/positions', (req, res) => {
+    fetchPositionsFromMongoDB()
+        .then(positions => {
+            res.status(200).json(positions);
+        })
+        .catch(error => {
+            console.error(error);
+            res.status(500).send('Error fetching positions from MongoDB');
+        });
+});
 app.post('/savePositions', (req, res) => {
     const nodeData = req.body;
-    const filePath = path.join(publicDirectoryPath, 'positions.json');
-
-    fs.writeFile(filePath, JSON.stringify(nodeData, null, 2), (err) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).send('Error saving nodes to file');
-        }
-        console.log('Positions saved to ' + filePath);
-    });
+    try {
+        savePositionsToMongoDB(nodeData);
+        res.status(200).send('Positions saved to MongoDB successfully');
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Error saving positions to MongoDB');
+    }
 });
 function startServer() {
     /*server = http.createServer(listener);
