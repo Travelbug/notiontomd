@@ -2,11 +2,14 @@
 
 const { Client } = require('@notionhq/client');
 const fs = require('fs-extra')
+const path = require('path');
 const slug = require('slug')
+const configPath = path.join(__dirname, '..', 'config.js');
+
 let config;
 
-if(fs.exists('../config.js')){
-    config = require('../config.js');
+if(fs.existsSync(configPath)){
+    config = require(configPath);
 }else{
     config = {
         NOTION_API_KEY: process.env.NOTION_API_KEY,
@@ -549,7 +552,6 @@ async function fetchPositionsFromMongoDB() {
 
 // Use port number from the PORT environment variable or 3000 if not specified
 const port = process.env.PORT || 3000;
-const path = require('path');
 const express = require('express');
 const {MONGODB_URL} = require("../config");
 const app = express();
