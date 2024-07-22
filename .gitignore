@@ -1,5 +1,6 @@
 # Configs
 config.js
+localConfig.js
 
 # Logs
 logs

@@ -4,8 +4,8 @@ const { Client } = require('@notionhq/client');
 const fs = require('fs-extra')
 const path = require('path');
 const slug = require('slug')
-const configPath = path.join(__dirname, '..', 'config.js');
 
+const configPath = path.join(__dirname, '..', 'localConfig.js');
 let config;
 
 if(fs.existsSync(configPath)){
