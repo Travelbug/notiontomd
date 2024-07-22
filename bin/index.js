@@ -5,7 +5,7 @@ const fs = require('fs-extra')
 const path = require('path');
 const slug = require('slug')
 
-const configPath = path.join(__dirname, '..', 'localConfig.js');
+const configPath = path.join(__dirname, '..', 'config.js');
 let config;
 
 if(fs.existsSync(configPath)){
@@ -553,7 +553,6 @@ async function fetchPositionsFromMongoDB() {
 // Use port number from the PORT environment variable or 3000 if not specified
 const port = process.env.PORT || 3000;
 const express = require('express');
-const {MONGODB_URL} = require("../config");
 const app = express();
 
 const publicDirectoryPath = path.join(__dirname, 'public');
