@@ -5,10 +5,9 @@ const fs = require('fs-extra')
 const slug = require('slug')
 let config;
 
-try {
+if(fs.exists('../config.js')){
     config = require('../config.js');
-} catch (error) {
-    console.log('config.js not found, using environment variables.');
+}else{
     config = {
         NOTION_API_KEY: process.env.NOTION_API_KEY,
         CHARACTER_DATABASE_ID: process.env.CHARACTER_DATABASE_ID,
@@ -20,7 +19,6 @@ try {
         RELATIONS_PATH: process.env.RELATIONS_PATH,
         BASE_URL: process.env.BASE_URL,
         MONGODB_URL: process.env.MONGODB_URL,
-
     };
 }
 
