@@ -23,6 +23,7 @@ if(fs.existsSync(configPath)){
         POSITION_DATABASE_ID: process.env.POSITION_DATABASE_ID,
         RELATION_DATABASE_ID: process.env.RELATION_DATABASE_ID,
         CASTING_DATABASE_ID: process.env.CASTING_DATABASE_ID,
+        GLOSSARY_DATABASE_ID: process.env.GLOSSARY_DATABASE_ID,
         EXPORT_PATH: process.env.EXPORT_PATH,
         RELATIONS_PATH: process.env.RELATIONS_PATH,
         BASE_URL: process.env.BASE_URL,
