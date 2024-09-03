@@ -7,6 +7,11 @@ const slug = require('slug')
 
 const configPath = path.join(__dirname, '..', 'config.js');
 let config;
+let relationshipWords = 0;
+let characterBackgroundWords = 0;
+let characterPlaystyleWords = 0;
+let characterBeliefWords = 0;
+let totalWords = 0;
 
 if(fs.existsSync(configPath)){
     config = require(configPath);
@@ -32,6 +37,7 @@ let positionPages = [];
 let relationPages = [];
 let castingPages = [];
 let characters = [];
+let glossaryPages = [];
 
 const puppeteer = require('puppeteer');
 
@@ -104,6 +110,147 @@ function getPageFromId(pageId, pages) {
     return pages.find(page => page.id === pageId);
 }
 
+function renderGlossary() {
+    
+    fs.outputFileSync(config.GLOSSARY_PATH + 'glossary.md', 
+        '---\n' +
+        'title: In-Game Glossary\n' +
+        'weight: 10\n' +
+        '---\n\n' +
+        `To be able to play the game responsibly but also somewhat historically accurate, we decided that we will create a glossary for us and our players. The glossary contains all the problematic and derogatory in-game words and phrases we are going to use during play. We will not tolerate any other violent terms. It also explains why they are problematic and give a suggestion for an alternative use off-game and during calibration.  \n\n`+
+        `###### We won't use those terms off-game  \n\n`+
+        `That way, we want to increase awareness while not falling into the trap of just ignoring this problematic part of our history by replacing it with fantasy language or avoiding it. If anyone does not want to play with any of the words on this glossary, please contact us. We will consider adjustments and advice from players, especially if someone is directly affected by discrimination factors we’re playing on.  \n\n` +
+        'We know this is a difficult part to get right. Our hope is, that by creating this glossary, we will encourage everyone to read into these topics.  \n\n'
+    );
+    let categories = {};
+    glossaryPages.forEach(page => {
+        let ingame = page.properties['In-Game'].title[0]?.plain_text ?? '';
+        let offgame = page.properties['Off-Game']?.rich_text ?? [];
+        offgame = renderRichTextToMarkdown(offgame);
+        offgame = wrapParagraphsInMarkdown(offgame);
+        let context = page.properties['Context']?.rich_text ?? [];
+        context = renderRichTextToMarkdown(context);
+        context = wrapParagraphsInMarkdown(context);
+        let category = page.properties['Category'].select?.name ?? '';
+        
+        if(!(category in categories))
+            categories[category] = [];
+        categories[category].push({ingame, offgame, context, category});
+    });
+    
+    let entries = Object.entries(categories);
+    // Sort entries alphabetically by the category
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    categories = Object.fromEntries(entries);
+
+    // Sort entries alphabetically by the ingame property
+    for (const category in categories) {
+        categories[category].sort((a, b) => a.ingame.localeCompare(b.ingame));
+    }
+    
+    for (const [category, entries] of Object.entries(categories)) {
+        fs.appendFileSync(config.GLOSSARY_PATH + 'glossary.md', 
+            `### ${category}\n\n---\n`
+        );
+        
+        entries.forEach(entry => {
+            fs.appendFileSync(config.GLOSSARY_PATH + 'glossary.md', 
+                `<a id="`+slug(entry.ingame)+`"></a>\n` +
+                `- **${entry.ingame}**\n` +
+                (entry.offgame !== '' ? `- Non-Derogatory / Off-Game: \n\n  ${entry.offgame}\n` : '')+
+                `- Context: \n\n  ${entry.context}  \n---\n`
+            );
+        });
+    }
+}
+
+let totalGlossaryReplacements = {};
+let glossaryEntries = [];
+function initializeGlossaryReplacements() {
+    glossaryEntries = glossaryPages.map(page => page.properties['In-Game'].title[0]?.plain_text);
+    glossaryEntries = glossaryEntries.filter(entry => entry !== undefined);
+    glossaryEntries = glossaryEntries.sort((a, b) => b.length - a.length); // Sort by length in descending order
+    //glossaryEntries = glossaryEntries.map(entry => entry.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')); // Escape special characters
+
+    glossaryEntries.forEach(entry => {
+        totalGlossaryReplacements[entry] = 0;
+    });
+    
+}
+
+function wrapTextWithGlossaryLinks(text) {
+    glossaryEntries.forEach((entry, index) => {
+        //split entry by / and add each part to the glossary
+        let parts = entry.split('/');
+        parts.forEach(part => {
+            if(part === '')
+                return;
+            part = part.trim();
+            part.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            let count = 0;
+
+            //replace regular
+            let regex = new RegExp(`(?<!\\[)\\b(${part}s?)\\b`, 'gi');
+            text = text.replace(regex, (match) => {
+                count++;
+                return `${match}<sup>[${index + 1}](/awareness/#${slug(entry)})</sup>`;
+            });
+            
+            //replace /glossary[entry] with sup number link
+            regex = new RegExp(`/glossary\\[${part}\\]`, 'gi');
+            text = text.replace(regex, (match) => {
+                count++;
+                return `<sup>[${index + 1}](/awareness/#${slug(entry)})</sup>`;
+            });
+            
+            totalGlossaryReplacements[entry] += count;
+        });
+    });
+
+    return text;
+}
+
+function renderRichTextToMarkdown(richText) {
+    if (!richText) return '';
+
+    return richText.map(textElement => {
+        let text = textElement.plain_text;
+
+        if (textElement.annotations.bold) {
+            text = `**${text}**`;
+        }
+        if (textElement.annotations.italic) {
+            text = `*${text}*`;
+        }
+        if (textElement.annotations.strikethrough) {
+            text = `~~${text}~~`;
+        }
+        if (textElement.annotations.underline) {
+            text = `__${text}__`;
+        }
+        if (textElement.annotations.code) {
+            text = `\`${text}\``;
+        }
+
+        return text;
+    }).join('');
+}
+
+function wrapParagraphsInMarkdown(text) {
+    // Split the text into paragraphs
+    let paragraphs = text.split('\n\n');
+
+    // Wrap each paragraph in <p> tags
+    //paragraphs = paragraphs.map(paragraph => `\n\n  ${paragraph}`);
+
+    // Join the paragraphs back into a single string
+    paragraphs = paragraphs.join('\n\n  ');
+
+    paragraphs = paragraphs.split('\n');
+    //paragraphs = paragraphs.map(paragraph => `  \n${paragraph}`);
+    return paragraphs.join('  \n');
+}
+
 class CharacterRenderer{
     pageId = "";
     name = "";
@@ -117,14 +264,18 @@ class CharacterRenderer{
     position = undefined;
     renderPath = "";
     weblink = "";
+    relationships = undefined;
+    supports = [];
+    opposes = [];
     
     beliefDescription = "";
     playstyleDescription = "";
+    backgroundDescription = "";
     
     sections = [];
     currentSection;
     
-    constructor(pageId, name, coreBelief, id, title, age, nationality, gender, group, position){
+    constructor(pageId, name, coreBelief, id, title, age, nationality, gender, group, position, relationships, supports, opposes){
         this.pageId = pageId;
         this.name = name;
         this.coreBelief = coreBelief;
@@ -137,6 +288,9 @@ class CharacterRenderer{
         this.position = position;
         this.renderPath = slug(this.group.name) + '/' + slug(this.name);
         this.weblink = config.BASE_URL + this.renderPath;
+        this.relationships = relationships;
+        this.supports = supports;
+        this.opposes = opposes;
         return this.readPageContent();
     }
     async readPageContent() {
@@ -220,6 +374,43 @@ class CharacterRenderer{
         this.currentSection.push(plaintext);
     }
     
+    renderRelationships() {
+        let output = '';
+        for (let key in this.relationships) {
+            if (!this.relationships.hasOwnProperty(key)) 
+                continue;
+            
+            let relation = this.relationships[key];
+            
+            if(
+                (relation.activeDescription === undefined || relation.activeDescription === '') && 
+                (relation.passiveDescription === undefined || relation.passiveDescription === ''))
+                continue;
+            
+            output += `- **${key}**  `;
+            output += `(${relation.age}, ${relation.position}, ${relation.group}, ${relation.nationality})  \n`;
+            if(relation.activeDescription !== undefined && relation.activeDescription !== '')
+                output += `${relation.activeDescription}  \n`;
+            if(relation.passiveDescription !== undefined && relation.passiveDescription !== '')
+                output += `${relation.passiveDescription}  \n`;
+        }
+        output = wrapTextWithGlossaryLinks(output);
+        return output
+    }
+    
+    renderBigotries() {
+        let output = '';
+        if(this.supports.length > 0){
+            output += '### Supports\n\n';
+            output += '###### ' + this.supports.join(', ') + '\n\n';
+        }
+        if(this.opposes.length > 0){
+            output += '### Opposes\n\n';
+            output += '###### ' + this.opposes.join(', ') + '\n\n';
+        }
+        return output;
+    }
+    
     renderCharacter() {
         // Add headings to play style sections
         addHeadings(this.sections[1], [
@@ -231,20 +422,27 @@ class CharacterRenderer{
         // Join all the sections into a single string
         this.beliefDescription = joinNestedArrays(this.sections[0], '-', '\n');
         this.playstyleDescription = joinNestedArrays(this.sections[1]);
+        this.backgroundDescription = joinNestedArrays(this.sections[3]);
+
+        characterBeliefWords += countWords(this.beliefDescription);
+        characterPlaystyleWords += countWords(this.playstyleDescription);
+        characterBackgroundWords += countWords(this.backgroundDescription);
         
-        let beliefWords = countWords(this.beliefDescription);
-        let playstyleWords = countWords(this.playstyleDescription);
-        let totalWords = beliefWords + playstyleWords;
+        // Wrap glossary links in the descriptions
+        this.beliefDescription = wrapTextWithGlossaryLinks(this.beliefDescription);
+        this.playstyleDescription = wrapTextWithGlossaryLinks(this.playstyleDescription);
+        this.backgroundDescription = wrapTextWithGlossaryLinks(this.backgroundDescription);
+        
         //console.log(this.beliefDescription);
-        console.log('Rendering ' + this.name);
+        //console.log('Rendering ' + this.name);
         //console.log('Belief: ' + countWords(this.beliefDescription) + ' words');
         //console.log('Playstyle: ' + countWords(this.playstyleDescription) + ' words');
-        if(totalWords > 300 || totalWords < 200){
+        /*if(totalWords > 300 || totalWords < 200){
             console.error('Total: ' + (countWords(this.beliefDescription) + countWords(this.playstyleDescription)) + ' words');
         }else{
             console.log('Total: ' + (countWords(this.beliefDescription) + countWords(this.playstyleDescription)) + ' words');
-        }
-        console.log('---');
+        }*/
+        //console.log('---');
         
         fs.outputFileSync(config.EXPORT_PATH + this.renderPath + '.md',
             '---\n' +
@@ -275,7 +473,15 @@ class CharacterRenderer{
             `###### ${this.position.name}\n` +
             `- **Obligation:** ${this.position.obligation}\n` +
             `- **Rights:** ${this.position.rights}\n` +
-            `- **Expectation:** ${this.position.expectation}\n\n`
+            `- **Expectation:** ${this.position.expectation}\n\n` +
+            '---\n' +
+            '## Background\n\n' +
+            this.backgroundDescription + '\n\n' +
+            '---\n' +
+            '## Relationships\n\n' +
+            this.renderRelationships() + '\n\n' +
+            '---\n' +
+            this.renderBigotries()
         );
     }
 }
@@ -320,59 +526,136 @@ function createRoleFromPage(rolePage){
     }
 }
 
+function createRelationshipsForCharacter(characterPage, relationPages) {
+    let relationships = [];
+    relationPages.forEach(relationPage => {
+        if(relationPage.properties['From'].relation[0]?.id === characterPage.id){
+            let toCharacter = getPageFromId(relationPage.properties['Towards'].relation[0]?.id, characterPages);
+            let characterName = composeCharacterName(toCharacter);
+            addRelationshipCharacterProperties(characterName, toCharacter);
+            addOrUpdateProperty(characterName, 'activeDescription', relationPage.properties['Active Relationship Description'].rich_text[0]?.plain_text.trim() ?? '');
+            addOrUpdateProperty(characterName, 'priority', relationPage.properties['From Priority'].number ?? 10);
+            relationshipWords += countWords(relationPage.properties['Active Relationship Description'].rich_text[0]?.plain_text.trim() ?? '');
+        }
+        if(relationPage.properties['Towards'].relation[0]?.id === characterPage.id){
+            let fromCharacter = getPageFromId(relationPage.properties['From'].relation[0]?.id, characterPages);
+            let characterName = composeCharacterName(fromCharacter);
+            addRelationshipCharacterProperties(characterName, fromCharacter);
+            addOrUpdateProperty(characterName, 'priority', relationPage.properties['Towards Priority'].number ?? 10);
+            addOrUpdateProperty(characterName, 'passiveDescription', relationPage.properties['Passive Relationship Description'].rich_text[0]?.plain_text.trim() ?? '');
+            relationshipWords += countWords(relationPage.properties['Passive Relationship Description'].rich_text[0]?.plain_text.trim() ?? '');
+        }
+    });
+    
+    let entries = Object.entries(relationships);
+    entries.sort((a, b) => {
+        if(a[1].priority < b[1].priority) return -1;
+        /*if(a[1].activeDescription === undefined && b[1].activeDescription !== undefined) {
+            return 1;
+        }else if(a[1].activeDescription !== undefined && b[1].activeDescription === undefined){
+            return -1;
+        }else{
+            return 0;
+        }*/
+    });
+    relationships = Object.fromEntries(entries);
+    
+    return relationships;
+    
+    function addOrUpdateProperty(key, property, value){
+        if(!(key in relationships))
+            relationships[key] = {};
+        relationships[key][property] = value;
+    }
+    
+    function addRelationshipCharacterProperties(characterName, characterPage){
+        let group = getPageFromId(characterPage.properties['Group'].relation[0]?.id, groupPages);
+        let position = getPageFromId(characterPage.properties['Position'].relation[0]?.id, positionPages);
+        let age = characterPage.properties['Age'].rich_text[0]?.plain_text;
+        let nationality = characterPage.properties['Nationality'].rich_text[0]?.plain_text;
+        addOrUpdateProperty(characterName, 'age', age);
+        addOrUpdateProperty(characterName, 'nationality', nationality);
+        addOrUpdateProperty(characterName, 'group', group.properties.Name.title[0]?.plain_text);
+        addOrUpdateProperty(characterName, 'position', position.properties.Name.title[0]?.plain_text);
+    }
+    
+    function composeCharacterName(character) {
+        let title = character.properties['Title'].rich_text[0]?.plain_text ?? '';
+        let name = character.properties.Name.title[0]?.plain_text;
+        
+        if(title === '') {
+            return name;
+        }else{
+            return title + ' ' + name;
+        }
+    }
+}
+
 function createMarkdown() {
-    getDatabasePages(config.CHARACTER_DATABASE_ID).then(pages => {
-        characterPages.push(...pages);
-    }).then(() => {
-        getDatabasePages(config.GROUP_DATABASE_ID).then(pages => {
-            groupPages.push(...pages);
+    fetchNotionData().then(() => {
+        Promise.all(characterPages.map(async page => {
+            let group = getPageFromId(page.properties['Group'].relation[0]?.id, groupPages);
+            let position = getPageFromId(page.properties['Position'].relation[0]?.id, positionPages);
+            let characterRenderer = await new CharacterRenderer(
+                page.id,
+                page.properties.Name.title[0]?.plain_text ?? '',
+                page.properties['Core Belief'].rich_text[0]?.plain_text ?? '',
+                page.properties['ID'].number ?? 0,
+                page.properties['Title'].rich_text[0]?.plain_text ?? '',
+                page.properties['Age'].rich_text[0]?.plain_text ?? '',
+                page.properties['Nationality'].rich_text[0]?.plain_text ?? '',
+                page.properties['Gender'].rich_text[0]?.plain_text ?? '',
+                createRoleFromPage(group),
+                createRoleFromPage(position),
+                createRelationshipsForCharacter(page, relationPages),
+                page.properties['Supports'].multi_select.map(support => support.name),
+                page.properties['Opposes'].multi_select.map(oppose => oppose.name)
+            );
+            characters.push(characterRenderer);
+        })).then(() => {
+            console.log('Rendering all characters');
+            renderAllCharacters();
+            updateWebLinks();
+            
+            console.log(`Total words: ${relationshipWords + characterBeliefWords + characterPlaystyleWords + characterBackgroundWords}`);
+            console.log(`Total character belief words: ${characterBeliefWords}`);
+            console.log(`Total character playstyle words: ${characterPlaystyleWords}`);
+            console.log(`Total character background words: ${characterBackgroundWords}`);
+            console.log(`Total relationship words: ${relationshipWords}`);
+
+            Object.entries(totalGlossaryReplacements).forEach(([entry, count]) => {
+                console.log(`${entry}: ${count}`);
+            });
+            
+            wait(5000).then(() => {
+                // Test character rendering for the first character
+                var character = characters.find(character => character.id === 1);
+                generatePDFForCharacter(character);
+            });
         }).then(() => {
-            getDatabasePages(config.POSITION_DATABASE_ID).then(pages => {
-                positionPages.push(...pages);
-            }).then(() => {
-                Promise.all(characterPages.map(async page => {
-                    let group = getPageFromId(page.properties['Group'].relation[0]?.id, groupPages);
-                    let position = getPageFromId(page.properties['Position'].relation[0]?.id, positionPages);
-                    let characterRenderer = await new CharacterRenderer(
-                        page.id,
-                        page.properties.Name.title[0]?.plain_text ?? '',
-                        page.properties['Core Belief'].rich_text[0]?.plain_text ?? '',
-                        page.properties['ID'].number ?? 0,
-                        page.properties['Title'].rich_text[0]?.plain_text ?? '',
-                        page.properties['Age'].rich_text[0]?.plain_text ?? '',
-                        page.properties['Nationality'].rich_text[0]?.plain_text ?? '',
-                        page.properties['Gender'].rich_text[0]?.plain_text ?? '',
-                        createRoleFromPage(group),
-                        createRoleFromPage(position)
-                    );
-                    characters.push(characterRenderer);
-                })).then(() => {
-                    console.log('Rendering all characters');
-                    renderAllCharacters();
-                    updateWebLinks();
-                    wait(5000).then(() => {
-                        // Test character rendering for the first character
-                        var character = characters.find(character => character.id === 1);
-                        generatePDFForCharacter(character);
-                    });
-                })
-            })
-        })
+            console.log('Rendering glossary');
+            renderGlossary();
+        });
     }).catch(err => console.error(err));
 }
 
-function fetchRelationsData() {
+function fetchNotionData() {
     return new Promise((resolve, reject) => {
         Promise.all([
             getDatabasePages(config.CHARACTER_DATABASE_ID),
             getDatabasePages(config.RELATION_DATABASE_ID),
             getDatabasePages(config.GROUP_DATABASE_ID),
-            getDatabasePages(config.CASTING_DATABASE_ID)
+            getDatabasePages(config.CASTING_DATABASE_ID),
+            getDatabasePages(config.POSITION_DATABASE_ID),
+            getDatabasePages(config.GLOSSARY_DATABASE_ID)
         ]).then(values => {
             characterPages = values[0];
             relationPages = values[1];
             groupPages = values[2];
             castingPages = values[3];
+            positionPages = values[4];
+            glossaryPages = values[5];
+            initializeGlossaryReplacements();
             resolve();
         }).catch(err=>{
             console.error(err);
@@ -463,44 +746,48 @@ function createRelationJSON(characterPages, relationPages) {
     '}'
 }
 
+function createSuperiorityJSON(characterPages, relationPages) {
+    let nodedataArray = [];
+    let linkDataArray = [];
+
+    characterPages.forEach(characterPage => {
+        let name = (characterPage.properties.Title.rich_text[0]?.plain_text ?? '') + ' ' + characterPage.properties.Name.title[0]?.plain_text;
+        nodedataArray.push({
+            id: characterPage.id,
+            text: name.trim(),
+            position: getPageFromId(characterPage.properties['Position'].relation[0]?.id,positionPages)?.properties.Name.title[0]?.plain_text,
+            group: getPageFromId(characterPage.properties['Group'].relation[0]?.id,groupPages)?.properties.Name.title[0]?.plain_text,
+            nationality: characterPage.properties.Nationality.rich_text[0]?.plain_text,
+            pageUrl: characterPage.url
+        });
+        
+        characterPage.properties['Subordinates'].relation.forEach(subordinate => {
+            linkDataArray.push({
+                from: characterPage.id,
+                to: subordinate.id,
+                text: '',
+                type: 'subordinate',
+                length: 50,
+            });
+            console.log('Subordinate: ' + subordinate.id);
+        });
+        
+    });
+    
+    
+    return '' +
+    '{ "class": "go.GraphLinksModel",\n' +
+    '  "nodeKeyProperty": "id",\n' +
+    '  "nodeDataArray": ' + JSON.stringify(nodedataArray) + ',\n' +
+    '  "linkDataArray": ' + JSON.stringify(linkDataArray) + '\n' +
+    '}'
+}
+
 function writeRelations(characterPages, relationPages) {
-    fetchRelationsData().then(() => {
+    fetchNotionData().then(() => {
         let json = createRelationJSON(characterPages, relationPages);
         fs.outputFileSync(config.RELATIONS_PATH + 'relations.json', json);
     });
-    /*
-    { "class": "go.GraphLinksModel",
-  "nodeKeyProperty": "id",
-  "nodeDataArray": [
-    {"id":-1, "loc":"155 -150", "type":"Start", "text":"Start" },
-    {"id":0, "loc":"190 15", "text":"Shopping"},
-    {"id":1, "loc":"353 32", "text":"Browse Items"},
-    {"id":2, "loc":"353 166", "text":"Search Items"},
-    {"id":3, "loc":"552 12", "text":"View Item"},
-    {"id":4, "loc":"700 -95", "text":"View Cart"},
-    {"id":5, "loc":"660 100", "text":"Update Cart"},
-    {"id":6, "loc":"850 20", "text":"Checkout"},
-    {"id":-2, "loc":"830 200", "type":"End", "text":"End" }
-  ],
-  "linkDataArray": [
-    { "from": -1, "to": 0, "progress": true, "text": "Visit online store", "curviness": -10 },
-    { "from": 0, "to": 1,  "progress": true, "text": "Browse" },
-    { "from": 0, "to": 2,  "progress": true, "text": "Use search bar", "curviness": -70 },
-    { "from": 1, "to": 2,  "progress": true, "text": "Use search bar" },
-    { "from": 2, "to": 3,  "progress": true, "text": "Click item", "curviness": -70 },
-    { "from": 2, "to": 2,  "progress": false, "text": "Another search", "curviness": 40 },
-    { "from": 1, "to": 3,  "progress": true, "text": "Click item" },
-    { "from": 3, "to": 0,  "progress": false, "text": "Not interested", "curviness": -100 },
-    { "from": 3, "to": 4,  "progress": true, "text": "Add to cart" },
-    { "from": 4, "to": 0,  "progress": false, "text": "More shopping", "curviness": -150 },
-    { "from": 4, "to": 5,  "progress": false, "text": "Update needed", "curviness": 70 },
-    { "from": 5, "to": 4,  "progress": false, "text": "Update made" },
-    { "from": 4, "to": 6,  "progress": true, "text": "Proceed" },
-    { "from": 6, "to": 5,  "progress": false, "text": "Update needed"},
-    { "from": 6, "to": -2, "progress": true, "text": "Purchase made" }
-  ]
-}
-    */
 }
 
 const { MongoClient } = require('mongodb');
@@ -560,15 +847,28 @@ const publicDirectoryPath = path.join(__dirname, 'public');
 app.use(express.static(publicDirectoryPath));
 app.get('/relations', (req, res) => {
     res.writeHead(200, {'Content-Type': 'application/json'});
-    fetchRelationsData().then(() => {
+    fetchNotionData().then(() => {
         let json = createRelationJSON(characterPages, relationPages);
         res.end(json);
         console.log('Serving json ' + json);
     });
 });
 
+app.get('/superiority', (req, res)=> {
+    res.writeHead(200, {'Content-Type': 'application/json'});
+    fetchNotionData().then(() => {
+        let json = createSuperiorityJSON(characterPages, relationPages);
+        res.end(json);
+        console.log('Serving json ' + json);
+    });
+});
+
+app.get('/chainofcommand', (req, res)=>{
+    res.sendFile(path.join(publicDirectoryPath, 'chainofcommand.html'));
+});
+
 app.get('/', (req, res) => {
-    res.sendFile(path.join(publicDirectoryPath, 'relations.html'));
+    res.sendFile(path.join(publicDirectoryPath, 'chainofcommand.html'));
 });
 
 app.use(express.json());
@@ -611,7 +911,7 @@ if (args.length > 0) {
             createMarkdown();
             break;
         case 'relations':
-            fetchRelationsData();
+            fetchNotionData();
             break;
         default:
             console.log(`Unknown function: ${args[0]}`);

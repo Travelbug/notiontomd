@@ -1,0 +1,266 @@
+
+  <!DOCTYPE html>
+  <html lang="en">
+  <body style="margin: 0">
+  <script src="https://unpkg.com/gojs@3.0.5/release/go.js"></script>
+  <div id="allSampleContent" class="p-4 w-full">
+<script id="code">
+  function init() {
+    myDiagram = new go.Diagram(
+      'myDiagramDiv', // must name or refer to the DIV HTML element
+      {
+        layout : new go.TreeLayout({
+          sorting: go.TreeSorting.Ascending,
+          comparer: (va, vb) => {
+            const da = va.node.data;
+            const db = vb.node.data;
+            if (da.group < db.group) return -1;
+            if (da.group > db.group) return 1;
+            return 0;
+          },
+          assignLayers: (node, layer) => {
+            const group = node.data.group;
+            if (group === 'Officer') return 0;
+            if (group === 'Crew') return 1;
+            if (group === 'Explorer') return 2;
+            if (group === 'Settler') return 3;
+            return layer;
+          },
+          layerStyle: go.TreeLayerStyle.Uniform,
+          angle: 90,
+          layerSpacing: 200
+        }),
+        'animationManager.initialAnimationStyle': go.AnimationStyle.None,
+        InitialAnimationStarting: (e) => {
+          var animation = e.subject.defaultAnimation;
+          animation.easing = go.Animation.EaseOutExpo;
+          animation.duration = 800;
+          animation.add(e.diagram, 'scale', 0.3, 1);
+          animation.add(e.diagram, 'opacity', 0, 1);
+        },
+
+        // have mouse wheel events zoom in and out instead of scroll up and down
+        'toolManager.mouseWheelBehavior': go.WheelMode.Zoom,
+        // support double-click in background creating a new node
+        //'clickCreatingTool.archetypeNodeData': { text: 'new node' },
+        // enable undo & redo
+        'undoManager.isEnabled': true,
+      }
+    );
+
+    // when the document is modified, add a "*" to the title and enable the "Save" button
+    /*myDiagram.addDiagramListener('Modified', (e) => {
+      var button = document.getElementById('SaveButton');
+      if (button) button.disabled = !myDiagram.isModified;
+      var idx = document.title.indexOf('*');
+      if (myDiagram.isModified) {
+        if (idx < 0) document.title += '*';
+      } else {
+        if (idx >= 0) document.title = document.title.slice(0, idx);
+      }
+    });*/
+
+    const colors = {
+      pink: '#fad8d8',
+      blue: '#abd1ff',
+      green: '#e5e6cf',
+      yellow: '#e6ddd5',
+      background: '#E5E1DF',
+    };
+    const colorsDark = {
+      green: '#3fab76',
+      yellow: '#f4d90a',
+      blue: '#0091ff',
+      pink: '#e65257',
+      background: '#161616',
+    };
+    myDiagram.div.style.backgroundColor = colors.background;
+
+    myDiagram.nodeTemplate = new go.Node('Auto', {
+      isShadowed: true,
+      shadowBlur: 0,
+      shadowOffset: new go.Point(5, 5),
+      shadowColor: 'black',
+      fromLinkable: false,
+      toLinkable: false,
+      /*doubleClick: function (e, node) {
+        let link = node.data.pageUrl.replace("https","notion");
+        console.log(`Opening ${link}`);
+        window.open(link, '_blank');
+      },*/
+    })
+      .bindTwoWay('location', 'loc', go.Point.parse, go.Point.stringify)
+      .add( // main node shape
+        new go.Shape('RoundedRectangle', {
+          strokeWidth: 1.5,
+          fill: colors.blue,
+          clipToBounds: false,
+          marginTop:15,
+        })
+        .bind('fill', 'group', (group) => {
+          if (group === 'Officer') return colors.blue;
+          if (group === 'Crew') return colors.pink;
+          if (group === 'Explorer') return colors.yellow;
+          if (group === 'Settler') return colors.green;
+          return colors.background;
+        })
+        .bind('figure', 'type', (type) => {
+          if (type === 'Start' || type === 'End') return 'Circle';
+          return 'RoundedRectangle';
+        }),
+        new go.Panel('Vertical').add(
+          new go.Picture({
+            width: 20,
+            height: 20,
+            margin: 2,
+          })
+          .bind('source', 'nationality', (nationality) => {
+            return `./img/flag_icon_${nationality.toLowerCase()}.png`;
+          }),
+          new go.TextBlock({
+            font: 'bold small-caps 11pt helvetica, bold arial, sans-serif',
+            shadowVisible: false,
+            margin: 8,
+            font: 'bold 14px sans-serif',
+            stroke: '#333',
+          }).bind('text'),
+          new go.TextBlock({
+            font: 'bold 10px sans-serif',
+            stroke: '#333',
+            margin: 4,
+            maxSize: new go.Size(130, NaN),
+          }).bind('text', 'position'),
+        )
+      );
+    // replace the default Link template in the linkTemplateMap
+    /*myDiagram.linkTemplate = new go.Link({
+      // shadow options are for the label, not the link itself
+      isShadowed: true,
+      shadowBlur: 0,
+      shadowColor: 'black',
+      shadowOffset: new go.Point(2.5, 2.5),
+      curve: go.Curve.Bezier,
+      curviness: 40,
+      adjusting: go.LinkAdjusting.Stretch,
+      reshapable: false,
+      relinkableFrom: false,
+      relinkableTo: false,
+      fromShortLength: 8,
+      toShortLength: 10,
+      doubleClick: function (e, link) {
+        if(link.data.pageUrl === undefined) return;
+        let url = link.data.pageUrl.replace("https","notion");
+        console.log(`Opening ${url}`);
+        window.open(url, '_blank');
+      },
+    })
+      .bindTwoWay('points')
+      .bind('curviness')
+      .add(
+        // Main shape geometry
+        new go.Shape({ strokeWidth: 2, shadowVisible: false, stroke: 'black' })
+          .bind('strokeDashArray', 'type', type => (type === 'relation' ? [] : [5, 6]))
+          .bind ('stroke', 'type', (type) => {
+            if (type === 'flag') return colorsDark.pink;
+            if (type === 'wish') return colorsDark.green;
+            return colorsDark.background;
+          }),
+        // Arrowheads
+        new go.Shape({ fromArrow: 'circle', strokeWidth: 1.5, fill: 'white' }),
+        new go.Shape({ toArrow: 'standard', stroke: null, scale: 1.5, fill: 'black' })
+          .bind('fill', 'type', (type) => {
+            if (type === 'flag') return colorsDark.pink;
+            if (type === 'wish') return colorsDark.green;
+            return colorsDark.background;
+          })
+          .bind('visible', 'type', (type) => type === 'relation' || type === 'flag'),
+        // The link label
+        new go.Panel('Auto').add(
+          new go.Shape('RoundedRectangle', {
+            shadowVisible: true,
+            fill: colors.yellow,
+            strokeWidth: 0.5,
+          }),
+          new go.TextBlock({
+            name: 'Label',
+            font: '9pt helvetica, arial, sans-serif',
+            margin: 1,
+            maxSize: new go.Size(80, NaN),
+            maxLines: 1,
+            visible: true,
+            editable: false, // enable in-place editing
+          }).bind('text')
+          // editing the text automatically updates the model data
+        ).bind('visible', 'type', (type) => type === 'relation')
+      );
+
+    // Show label when mouse hovers over link
+    myDiagram.linkTemplate.mouseEnter = function(e, link) {
+      
+      link.layerName = 'Foreground';
+      
+      var label = link.findObject('Label');
+      if (label !== null) {
+        label.maxSize = new go.Size(200, NaN);
+        label.maxLines = 1000;
+      }
+    };
+
+    // Hide label when mouse leaves link
+    myDiagram.linkTemplate.mouseLeave = function(e, link) {
+      
+      link.layerName = '';
+      
+      var label = link.findObject('Label');
+      if (label !== null) {
+        label.maxSize = new go.Size(80, 30);
+        label.maxLines = 1;
+      }
+    };*/
+
+    myDiagram.linkTemplate = new go.Link({
+      selectable: false
+    })
+            .add(
+                    new go.Shape({ strokeWidth: 3, stroke: '#333' })
+            );
+    
+    // read in the JSON data from the "mySavedModel" element
+    load();
+  }
+
+  function updateRoutes() {
+    myDiagram.startTransaction('invalidate routes');
+    myDiagram.links.each(function(link) {
+      link.invalidateRoute();
+    });
+    myDiagram.commitTransaction('invalidate routes');
+  }
+  
+  // Show the diagram's model in JSON format
+  
+  function load() {
+    fetch('/superiority')
+      .then(response => response.json())
+      .then(data => {
+        myDiagram.model = go.Model.fromJson(JSON.stringify(data));
+      })
+      .catch(error => console.error('Error:', error));
+  }
+
+  window.addEventListener('DOMContentLoaded', init);
+</script>
+
+<div id="sample">
+  <div id="myDiagramDiv" 
+       style="border: 1px solid black; 
+       width: 100%; 
+       height: 100%; 
+       background: rgb(232, 232, 232); 
+       position: fixed; 
+       -webkit-tap-highlight-color: rgba(255, 255, 255, 0); 
+       cursor: auto;">
+  </div>
+
+  </body>
+  </html>
