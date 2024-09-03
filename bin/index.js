@@ -766,6 +766,7 @@ function createSuperiorityJSON(characterPages, relationPages) {
             linkDataArray.push({
                 from: characterPage.id,
                 to: subordinate.id,
+                no: characterPage.properties['ID'].number,
                 text: '',
                 type: 'subordinate',
                 length: 50,

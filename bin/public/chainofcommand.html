@@ -14,8 +14,8 @@
           comparer: (va, vb) => {
             const da = va.node.data;
             const db = vb.node.data;
-            if (da.group < db.group) return -1;
-            if (da.group > db.group) return 1;
+            if (da.no < db.no) return -1;
+            if (da.no > db.no) return 1;
             return 0;
           },
           assignLayers: (node, layer) => {
@@ -48,18 +48,6 @@
       }
     );
 
-    // when the document is modified, add a "*" to the title and enable the "Save" button
-    /*myDiagram.addDiagramListener('Modified', (e) => {
-      var button = document.getElementById('SaveButton');
-      if (button) button.disabled = !myDiagram.isModified;
-      var idx = document.title.indexOf('*');
-      if (myDiagram.isModified) {
-        if (idx < 0) document.title += '*';
-      } else {
-        if (idx >= 0) document.title = document.title.slice(0, idx);
-      }
-    });*/
-
     const colors = {
       pink: '#fad8d8',
       blue: '#abd1ff',
@@ -83,11 +71,6 @@
       shadowColor: 'black',
       fromLinkable: false,
       toLinkable: false,
-      /*doubleClick: function (e, node) {
-        let link = node.data.pageUrl.replace("https","notion");
-        console.log(`Opening ${link}`);
-        window.open(link, '_blank');
-      },*/
     })
       .bindTwoWay('location', 'loc', go.Point.parse, go.Point.stringify)
       .add( // main node shape
@@ -132,91 +115,6 @@
           }).bind('text', 'position'),
         )
       );
-    // replace the default Link template in the linkTemplateMap
-    /*myDiagram.linkTemplate = new go.Link({
-      // shadow options are for the label, not the link itself
-      isShadowed: true,
-      shadowBlur: 0,
-      shadowColor: 'black',
-      shadowOffset: new go.Point(2.5, 2.5),
-      curve: go.Curve.Bezier,
-      curviness: 40,
-      adjusting: go.LinkAdjusting.Stretch,
-      reshapable: false,
-      relinkableFrom: false,
-      relinkableTo: false,
-      fromShortLength: 8,
-      toShortLength: 10,
-      doubleClick: function (e, link) {
-        if(link.data.pageUrl === undefined) return;
-        let url = link.data.pageUrl.replace("https","notion");
-        console.log(`Opening ${url}`);
-        window.open(url, '_blank');
-      },
-    })
-      .bindTwoWay('points')
-      .bind('curviness')
-      .add(
-        // Main shape geometry
-        new go.Shape({ strokeWidth: 2, shadowVisible: false, stroke: 'black' })
-          .bind('strokeDashArray', 'type', type => (type === 'relation' ? [] : [5, 6]))
-          .bind ('stroke', 'type', (type) => {
-            if (type === 'flag') return colorsDark.pink;
-            if (type === 'wish') return colorsDark.green;
-            return colorsDark.background;
-          }),
-        // Arrowheads
-        new go.Shape({ fromArrow: 'circle', strokeWidth: 1.5, fill: 'white' }),
-        new go.Shape({ toArrow: 'standard', stroke: null, scale: 1.5, fill: 'black' })
-          .bind('fill', 'type', (type) => {
-            if (type === 'flag') return colorsDark.pink;
-            if (type === 'wish') return colorsDark.green;
-            return colorsDark.background;
-          })
-          .bind('visible', 'type', (type) => type === 'relation' || type === 'flag'),
-        // The link label
-        new go.Panel('Auto').add(
-          new go.Shape('RoundedRectangle', {
-            shadowVisible: true,
-            fill: colors.yellow,
-            strokeWidth: 0.5,
-          }),
-          new go.TextBlock({
-            name: 'Label',
-            font: '9pt helvetica, arial, sans-serif',
-            margin: 1,
-            maxSize: new go.Size(80, NaN),
-            maxLines: 1,
-            visible: true,
-            editable: false, // enable in-place editing
-          }).bind('text')
-          // editing the text automatically updates the model data
-        ).bind('visible', 'type', (type) => type === 'relation')
-      );
-
-    // Show label when mouse hovers over link
-    myDiagram.linkTemplate.mouseEnter = function(e, link) {
-      
-      link.layerName = 'Foreground';
-      
-      var label = link.findObject('Label');
-      if (label !== null) {
-        label.maxSize = new go.Size(200, NaN);
-        label.maxLines = 1000;
-      }
-    };
-
-    // Hide label when mouse leaves link
-    myDiagram.linkTemplate.mouseLeave = function(e, link) {
-      
-      link.layerName = '';
-      
-      var label = link.findObject('Label');
-      if (label !== null) {
-        label.maxSize = new go.Size(80, 30);
-        label.maxLines = 1;
-      }
-    };*/
 
     myDiagram.linkTemplate = new go.Link({
       selectable: false
