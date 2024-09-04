@@ -750,8 +750,15 @@ function createRelationJSON(characterPages, relationPages) {
 function createSuperiorityJSON(characterPages, relationPages) {
     let nodedataArray = [];
     let linkDataArray = [];
+    let excludedCharacters = [41];
 
     characterPages.forEach(characterPage => {
+        let no = characterPage.properties['ID'].number;
+        if(excludedCharacters.includes(no)){
+            console.log('Excluding ' + no);
+            return;
+        }
+        
         let name = (characterPage.properties.Title.rich_text[0]?.plain_text ?? '') + ' ' + characterPage.properties.Name.title[0]?.plain_text;
         nodedataArray.push({
             id: characterPage.id,
@@ -766,7 +773,7 @@ function createSuperiorityJSON(characterPages, relationPages) {
             linkDataArray.push({
                 from: characterPage.id,
                 to: subordinate.id,
-                no: characterPage.properties['ID'].number,
+                no: no,
                 text: '',
                 type: 'subordinate',
                 length: 50,
